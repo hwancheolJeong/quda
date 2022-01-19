@@ -811,6 +811,9 @@ namespace quda
   */
   void ApplyStaggeredQSmear(ColorSpinorField &out, const ColorSpinorField &in, const GaugeField &U, int parity, int dir, 
                     bool dagger, const int *comm_override, TimeProfile &profile);                             
+  /*hc*/
+  void ApplyStaggeredQSmear(ColorSpinorField &out, const ColorSpinorField &in, const GaugeField &U, int parity, int dir, 
+                            bool dagger, const int *comm_override, const int t0, TimeProfile &profile);
 
   /**
      @brief Apply the (improved) staggered Kahler-Dirac inverse block to a color-spinor field.

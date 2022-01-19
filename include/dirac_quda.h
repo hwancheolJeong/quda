@@ -239,7 +239,13 @@ namespace quda {
     {
       errorQuda("Not implemented!\n");
     }
-    
+    //hc
+    virtual void SmearOp2(ColorSpinorField &, const ColorSpinorField &,
+                         const double &, const double &, const QudaParity parity = QUDA_INVALID_PARITY, const int t0 = -1) const
+    {
+      errorQuda("Not implemented!\n");
+    }
+
     /**
        @brief Apply M for the dirac op. E.g. the Schur Complement operator
     */
@@ -1530,6 +1536,8 @@ public:
     virtual void prefetch(QudaFieldLocation mem_space, qudaStream_t stream = device::get_default_stream()) const;
     
     void SmearOp(ColorSpinorField &out, const ColorSpinorField &in, const double &a, const double &b, const QudaParity parity = QUDA_INVALID_PARITY) const;    
+    //hc
+    void SmearOp2(ColorSpinorField &out, const ColorSpinorField &in, const double &a, const double &b, const QudaParity parity = QUDA_INVALID_PARITY, const int t0 = -1) const;
   };
 
   // Even-odd preconditioned staggered

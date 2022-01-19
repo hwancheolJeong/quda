@@ -151,6 +151,32 @@ namespace quda {
 
     flops += 1368ll*in.Volume(); // FIXME
   }  
+  //hc
+  void DiracImprovedStaggered::SmearOp2(ColorSpinorField &out, const ColorSpinorField &in, 
+                                        const double &a, const double &b, const QudaParity parity, const int t0) const
+  {
+    checkSpinorAlias(in, out);
+
+    int comm_dim[4] = {};
+    // only switch on comms needed for directions with a derivative
+    for (int i = 0; i < 4; i++) {
+      comm_dim[i] = comm_dim_partitioned(i);
+      if (laplace3D == i) comm_dim[i] = 0;
+    }
+ 
+    // if (in.SiteSubset() == QUDA_PARITY_SITE_SUBSET) {
+    //   ApplyStaggeredQSmear(out, in, *gauge, parity, laplace3D, dagger, comm_dim, profile);
+    // } else {
+	    
+    //   ApplyStaggeredQSmear(out.Even(), in.Even(), *gauge, QUDA_EVEN_PARITY, laplace3D, dagger, comm_dim, profile);
+    //   ApplyStaggeredQSmear(out.Odd(), in.Odd(), *gauge, QUDA_ODD_PARITY, laplace3D, dagger, comm_dim, profile);    
+    // }
+    //ApplyStaggeredQSmear(out, in, *gauge, QUDA_INVALID_PARITY, laplace3D, dagger, comm_dim, profile); // parity is not used
+    //hc
+    ApplyStaggeredQSmear(out, in, *gauge, QUDA_INVALID_PARITY, laplace3D, dagger, comm_dim, t0, profile); // parity is not used
+
+    flops += 1368ll*in.Volume(); // FIXME
+  }
 
   void DiracImprovedStaggered::createCoarseOp(GaugeField &Y, GaugeField &X, const Transfer &T, double, double mass,
                                               double, double, bool allow_truncation) const

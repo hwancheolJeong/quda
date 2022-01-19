@@ -165,6 +165,30 @@ namespace quda
         errorQuda("Unsupported nSpin= %d", in.Nspin());
       }
     }
+    //hc
+    inline StaggeredQSmearApply(ColorSpinorField &out, const ColorSpinorField &in, const GaugeField &U, int parity, int dir,
+                                bool dagger, const int *comm_override, const int t0,
+                                TimeProfile &profile)
+    {
+      if (in.Nspin() == 1) {
+#if defined(GPU_STAGGERED_DIRAC) // && defined(GPU_LAPLACE) => GPU_QSMEARING
+        constexpr int nDim = 4;
+        constexpr int nSpin = 1;
+        //StaggeredQSmearArg<Float, nSpin, nColor, nDim, recon> arg(out, in, U, parity, dir, dagger, comm_override);
+        //hc
+        StaggeredQSmearArg<Float, nSpin, nColor, nDim, recon> arg(out, in, U, parity, dir, dagger, comm_override, t0);
+        StaggeredQSmear<decltype(arg)> staggered_qsmear(arg, out, in);
+
+        dslash::DslashPolicyTune<decltype(staggered_qsmear)> policy(
+          staggered_qsmear, in, in.VolumeCB(),
+          in.GhostFaceCB(), profile);
+#else
+        errorQuda("nSpin=%d StaggeredQSmear operator required staggered dslash and laplace to be enabled", in.Nspin());
+#endif
+      } else {
+        errorQuda("Unsupported nSpin= %d", in.Nspin());
+      }
+    }
   };
 
   // Apply the StaggeredQSmear operator
@@ -174,5 +198,13 @@ namespace quda
                     bool dagger, const int *comm_override, TimeProfile &profile)
   {
     instantiate<StaggeredQSmearApply>(out, in, U, parity, dir, dagger, comm_override, profile);
+  }
+  //hc
+  void ApplyStaggeredQSmear(ColorSpinorField &out, const ColorSpinorField &in, const GaugeField &U, int parity, int dir,
+                            bool dagger, const int *comm_override, const int t0, TimeProfile &profile)
+  {
+    // instantiate<StaggeredQSmearApply>(out, in, U, parity, dir, dagger, comm_override, profile);
+    //hc
+    instantiate<StaggeredQSmearApply>(out, in, U, parity, dir, dagger, comm_override, t0, profile);
   }
 } // namespace quda

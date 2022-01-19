@@ -5706,13 +5706,18 @@ void performTwoLinkGaussianSmearNStep(void *h_in, QudaInvertParam *inv_param, co
   const double msq     = 1. / ftmp;  
   const double a       = 6.0 + msq;
   const double b       = 0.0; 
+
+  //hc
+  const int t0_local = t0 < 0 ? INT_MIN : t0 - comm_coord(3) * X[3];
   
   for (int i = 0; i < n_steps; i++) {
     if (i > 0) std::swap(in, out);
     blas::ax(ftmp, *in); //
     blas::axpy(a, *in, *temp1); //
     
-    qsmear_op.Expose()->SmearOp(*out, *in, a, b);
+    //qsmear_op.Expose()->SmearOp(*out, *in, a, b);
+    //hc
+    qsmear_op.Expose()->SmearOp2(*out, *in, a, b, QUDA_INVALID_PARITY, t0_local);
     if (getVerbosity() >= QUDA_DEBUG_VERBOSE) {
       double norm = blas::norm2(*out);
       printfQuda("Step %d, vector norm %e\n", i, norm);

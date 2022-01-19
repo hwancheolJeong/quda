@@ -34,6 +34,8 @@ namespace quda
     const F in_pack; /** input vector field used in packing to be able to independently resetGhost */
     const G U;    /** the gauge field */
     int dir;      /** The direction from which to omit the derivative */
+    //hc
+    const int t0;
 
     StaggeredQSmearArg(ColorSpinorField &out, const ColorSpinorField &in, const GaugeField &U, int parity, int dir, 
                bool dagger, const int *comm_override) :
@@ -44,6 +46,8 @@ namespace quda
       in_pack(in, 3),
       U(U),
       dir(dir)
+      //hc
+      , t0(INT_MIN)
     {
       if (in.V() == out.V()) errorQuda("Aliasing pointers");
       checkOrder(out, in);        // check all orders match
@@ -53,6 +57,26 @@ namespace quda
         errorQuda("Unsupported field order colorspinor(in)=%d gauge=%d combination\n", in.FieldOrder(), U.FieldOrder());
       if (dir < 3 || dir > 4) errorQuda("Unsupported laplace direction %d (must be 3 or 4)", dir);
     }
+    //hc
+    StaggeredQSmearArg(ColorSpinorField &out, const ColorSpinorField &in, const GaugeField &U, int parity, int dir, 
+                       bool dagger, const int *comm_override, const int t0) :
+      DslashArg<Float, nDim>(in, U, parity, dagger, false, 3, false, comm_override),
+      out(out, 3),
+      in(in, 3),
+      in_pack(in, 3),
+      U(U),
+      dir(dir)
+      //hc
+      , t0(t0)
+    {
+      if (in.V() == out.V()) errorQuda("Aliasing pointers");
+      checkOrder(out, in);        // check all orders match
+      checkPrecision(out, in, U); // check all precisions match
+      checkLocation(out, in, U);  // check all locations match
+      if (!in.isNative() || !U.isNative())
+        errorQuda("Unsupported field order colorspinor(in)=%d gauge=%d combination\n", in.FieldOrder(), U.FieldOrder());
+      if (dir < 3 || dir > 4) errorQuda("Unsupported laplace direction %d (must be 3 or 4)", dir);
+    }    
   };
 
   /**
@@ -75,6 +99,9 @@ namespace quda
     typedef Matrix<complex<real>, Arg::nColor> Link;
     const int their_spinor_parity = (arg.nParity == 2) ? parity : 0;
 
+    //hc
+    if( ( arg.t0 != INT_MIN ) && ( coord[3] != arg.t0 ) ) return ;
+    
 #pragma unroll
     for (int d = 0; d < Arg::nDim; d++) { // loop over dimension
       if (d != dir) {
