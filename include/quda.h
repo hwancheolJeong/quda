@@ -1647,6 +1647,19 @@ extern "C" {
 
   void setMPICommHandleQuda(void *mycomm);
 
+  /**
+   * Performs two-link Gaussian smearing on a given spinor (for staggered fermions).
+   * @param h_in        Input spinor field to smear
+   * @param inv_param   Contains all metadata regarding host and device storage 
+   *                    and operator which will be applied to the spinor
+   * @param n_steps     Number of steps to apply
+   * @param width       The width of the Gaussian
+   * @param compute_2link nonzero to compute two-link gauge and save to gaugeSmeared,
+   *                      zero to reuse gaugeSmeared
+   * @param t0          Set if the input spinor is on a time slice (default = -1)
+   */
+  void performTwoLinkGaussianSmearNStep(void *h_in, QudaInvertParam *inv_param, const int n_steps, const double width, const int compute_2link, const int t0);  
+
 #ifdef __cplusplus
 }
 #endif

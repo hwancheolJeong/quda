@@ -35,6 +35,7 @@
 #include <split_grid.h>
 
 #include <ks_force_quda.h>
+#include <ks_qsmear.h>
 
 #include <gauge_force_quda.h>
 #include <gauge_update_quda.h>
@@ -169,6 +170,9 @@ static TimeProfile profilePlaq("plaqQuda");
 
 //!< Profiler for wuppertalQuda
 static TimeProfile profileWuppertal("wuppertalQuda");
+
+//!< Profiler for gaussianSmearQuda
+static TimeProfile profileGaussianSmear("gaussianSmearQuda");
 
 //!<Profiler for gaussQuda
 static TimeProfile profileGauss("gaussQuda");
@@ -1443,6 +1447,7 @@ void endQuda(void)
     profileCovDev.Print();
     profilePlaq.Print();
     profileGaugeObs.Print();
+    profileGaussianSmear.Print();
     profileGaugeSmear.Print();
     profileWFlow.Print();
     profileProject.Print();
@@ -5329,6 +5334,158 @@ void performWuppertalnStep(void *h_out, void *h_in, QudaInvertParam *inv_param, 
 
   profileWuppertal.TPSTOP(QUDA_PROFILE_TOTAL);
 }
+ 
+
+void performTwoLinkGaussianSmearNStep(void *h_in, QudaInvertParam *inv_param, const int n_steps, const double width, const int compute_2link, const int t0 /*=-1*/)
+{
+  if(n_steps == 0) return;
+  
+  profileGaussianSmear.TPSTART(QUDA_PROFILE_TOTAL);
+  profileGaussianSmear.TPSTART(QUDA_PROFILE_INIT);
+
+  if (gaugePrecise == nullptr) errorQuda("Gauge field must be loaded");
+    
+  if (getVerbosity() >= QUDA_DEBUG_VERBOSE) printQudaInvertParam(inv_param);
+
+  if ( gaugeSmeared == nullptr || compute_2link != 0 ) {
+  
+    if (getVerbosity() >= QUDA_VERBOSE) printfQuda("Gaussian smearing done with gaugeSmeared\n");
+    if ( gaugeSmeared != nullptr) delete gaugeSmeared;
+    
+    GaugeFieldParam gParam(*gaugePrecise);
+    //
+    gParam.create        = QUDA_NULL_FIELD_CREATE;
+    gParam.reconstruct   = QUDA_RECONSTRUCT_NO;
+    gParam.setPrecision(inv_param->cuda_prec, true);
+    gParam.link_type     = QUDA_ASQTAD_LONG_LINKS;
+    gParam.ghostExchange = QUDA_GHOST_EXCHANGE_PAD;
+    gParam.nFace = 3;
+    gParam.pad = gParam.pad*gParam.nFace;
+    //
+    gaugeSmeared = new cudaGaugeField(gParam);
+    
+    cudaGaugeField *two_link_ext = createExtendedGauge(*gaugePrecise, R, profileGauge);//aux field
+    
+    computeTwoLink(*gaugeSmeared, *two_link_ext);
+    
+    gaugeSmeared->exchangeGhost();
+    
+    delete two_link_ext;   
+  }
+
+  if (!initialized) errorQuda("QUDA not initialized");
+
+  if (getVerbosity() >= QUDA_DEBUG_VERBOSE) { printQudaInvertParam(inv_param); }
+
+  checkInvertParam(inv_param);
+  
+  // Create device side ColorSpinorField vectors and to pass to the
+  // compute function.
+  const int *X = gaugeSmeared->X();
+  
+  inv_param->dslash_type = QUDA_ASQTAD_DSLASH;
+  
+  ColorSpinorParam cpuParam(h_in, *inv_param, X, QUDA_MAT_SOLUTION, QUDA_CPU_FIELD_LOCATION);
+  cpuParam.nSpin = 1;
+  // QUDA style pointer for host data.
+  ColorSpinorField *in_h = ColorSpinorField::Create(cpuParam);
+
+  // Device side data.
+  ColorSpinorParam cudaParam(cpuParam);
+  cudaParam.location = QUDA_CUDA_FIELD_LOCATION;
+  cudaParam.create   = QUDA_ZERO_FIELD_CREATE;
+  cudaParam.setPrecision(inv_param->cuda_prec, inv_param->cuda_prec, true);
+  ColorSpinorField *in    = ColorSpinorField::Create(cudaParam);
+  ColorSpinorField *out   = ColorSpinorField::Create(cudaParam);
+  ColorSpinorField *temp1 = ColorSpinorField::Create(cudaParam);
+  ColorSpinorField *temp2 = ColorSpinorField::Create(cudaParam);
+ 
+
+  // Create the smearing operator
+  //------------------------------------------------------
+  //bool pc_solve  = false;//staggered field
+  Dirac *d       = nullptr;
+  DiracParam diracParam;
+  //
+  diracParam.type      = QUDA_ASQTAD_DIRAC;
+  diracParam.matpcType = inv_param->matpc_type;
+  diracParam.dagger    = inv_param->dagger;
+  diracParam.gauge     = gaugeSmeared;
+  diracParam.fatGauge  = gaugeFatPrecise;
+  diracParam.longGauge = gaugeLongPrecise;
+  diracParam.clover = cloverPrecise;
+  diracParam.kappa  = inv_param->kappa;
+  diracParam.mass   = inv_param->mass;
+  diracParam.m5     = inv_param->m5;
+  diracParam.mu     = inv_param->mu;
+  diracParam.laplace3D = inv_param->laplace3D;
+
+  for (int i=0; i<4; i++) diracParam.commDim[i] = 1;   // comms are always on
+
+  if (diracParam.gauge->Precision() != inv_param->cuda_prec)
+    errorQuda("Gauge precision %d does not match requested precision %d\n", diracParam.gauge->Precision(), inv_param->cuda_prec);
+  //
+  d = Dirac::create(diracParam); // create the Dirac operator
+  
+  Dirac &dirac = *d;
+  DiracM qsmear_op(dirac);
+  profileGaussianSmear.TPSTOP(QUDA_PROFILE_INIT);
+
+  // Copy host data to device
+  profileGaussianSmear.TPSTART(QUDA_PROFILE_H2D);
+  *in = *in_h;
+  profileGaussianSmear.TPSTOP(QUDA_PROFILE_H2D);
+
+  const double ftmp    = -(width*width)/(4.0*n_steps*4.0);  /* Extra 4 to compensate for stride 2 */
+  // Scale up the source to prevent underflow
+  profileGaussianSmear.TPSTART(QUDA_PROFILE_COMPUTE);
+  
+  const double msq     = 1. / ftmp;  
+  const double a       = 6.0 + msq;
+  const double b       = 0.0;
+  
+  for (int i = 0; i < n_steps; i++) {
+    if (i > 0) std::swap(in, out);
+    blas::ax(ftmp, *in); //
+    blas::axpy(a, *in, *temp1); //
+    
+    qsmear_op.Expose()->SmearOp(*out, *in, a, 0.0, t0);
+    if (getVerbosity() >= QUDA_DEBUG_VERBOSE) {
+      double norm = blas::norm2(*out);
+      printfQuda("Step %d, vector norm %e\n", i, norm);
+    }
+    blas::xpay(*temp1, -1.0, *out);
+    blas::zero(*temp1);
+  }
+
+#if 0
+  // Normalise the source
+  double nout = blas::norm2(*out);
+  blas::ax(1.0 / sqrt(nout), *out);
+#endif
+  profileGaussianSmear.TPSTOP(QUDA_PROFILE_COMPUTE);
+
+  // Copy device data to host.
+  profileGaussianSmear.TPSTART(QUDA_PROFILE_D2H);
+  *in_h = *out;
+  profileGaussianSmear.TPSTOP(QUDA_PROFILE_D2H);
+
+  profileGaussianSmear.TPSTART(QUDA_PROFILE_FREE);
+
+  if (getVerbosity() >= QUDA_VERBOSE) printfQuda("Finished 2link Gaussian smearing.\n");
+
+  delete temp1;
+  delete temp2;
+  delete out;
+  delete in;
+  delete in_h;
+  delete d;
+
+  profileGaussianSmear.TPSTOP(QUDA_PROFILE_FREE);
+  profileGaussianSmear.TPSTOP(QUDA_PROFILE_TOTAL);
+  saveTuneCache();
+}
+
 
 void performGaugeSmearQuda(QudaGaugeSmearParam *smear_param, QudaGaugeObservableParam *obs_param)
 {

@@ -138,6 +138,33 @@ namespace quda {
 
     StaggeredCoarseOp(Y, X, T, *gauge, *gauge, *gauge, mass, allow_truncation, QUDA_STAGGERED_DIRAC, QUDA_MATPC_INVALID);
   }
+  
+  void DiracStaggered::SmearOp(ColorSpinorField &out, const ColorSpinorField &in, const double &a, const double &b,
+                             const int &t0, const QudaParity parity) const
+  {
+    checkSpinorAlias(in, out);
+    
+    bool is_time_slice = t0 >= 0 && t0 < comm_dim(3)*in.X(3) ? true : false;
+    if( is_time_slice && laplace3D > 3 )
+    {
+      warningQuda( "t0 will be ignored for d>3 dimensional Laplacian." );
+      is_time_slice = false;
+    }
+
+    int t0_local = t0 - comm_coord(3)*in.X(3);
+    if( is_time_slice && ( t0_local < 0 || t0_local >= in.X(3) ) ) t0_local = -1; // when source is not in this local lattice
+
+    int comm_dim[4] = {};
+    // only switch on comms needed for directions with a derivative
+    for (int i = 0; i < 4; i++) {
+      comm_dim[i] = comm_dim_partitioned(i);
+      if (laplace3D == i) comm_dim[i] = 0;
+    }
+
+    ApplyStaggeredQSmear(out, in, *gauge, t0_local, is_time_slice, QUDA_INVALID_PARITY, laplace3D, dagger, comm_dim, profile); // parity is not used
+    flops += 1368ll*in.Volume(); // FIXME
+  }  
+  
 
   DiracStaggeredPC::DiracStaggeredPC(const DiracParam &param)
     : DiracStaggered(param)

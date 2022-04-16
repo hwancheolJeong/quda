@@ -231,6 +231,16 @@ namespace quda {
 			    const double &k) const = 0;
 
     /**
+       @brief Similar to the Xpay version of Dslash, but used only by the Laplace op for 
+       smearing.
+    */    
+    virtual void SmearOp(ColorSpinorField &, const ColorSpinorField &, 
+                         const double &a, const double &b, const int &t0,  const QudaParity parity = QUDA_INVALID_PARITY) const 
+    {
+      errorQuda("Not implemented!\n");
+    }
+    
+    /**
        @brief Apply M for the dirac op. E.g. the Schur Complement operator
     */
     virtual void M(ColorSpinorField &out, const ColorSpinorField &in) const = 0;
@@ -1302,6 +1312,8 @@ public:
      */
     void createCoarseOp(GaugeField &Y, GaugeField &X, const Transfer &T, double kappa, double mass, double mu = 0.,
                         double mu_factor = 0., bool allow_truncation = false) const;
+
+    void SmearOp(ColorSpinorField &out, const ColorSpinorField &in, const double &a, const double &b, const int &t0,  const QudaParity parity = QUDA_INVALID_PARITY) const;
   };
 
   // Even-odd preconditioned staggered
@@ -1532,6 +1544,8 @@ public:
       @param[in] stream Which stream to run the prefetch in (default 0)
     */
     virtual void prefetch(QudaFieldLocation mem_space, qudaStream_t stream = device::get_default_stream()) const;
+    
+    void SmearOp(ColorSpinorField &out, const ColorSpinorField &in, const double &a, const double &b, const int &t0,  const QudaParity parity = QUDA_INVALID_PARITY) const;    
   };
 
   // Even-odd preconditioned staggered
