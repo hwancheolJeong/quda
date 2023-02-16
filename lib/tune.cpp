@@ -869,6 +869,8 @@ namespace quda
       // check the tune_rank is consistent across all ranks if doing
       // standard kernel tuning
       if (commGlobalReduction() && !policyTuning() && !uberTuning()) {
+        //hc
+        printf( "[%d] check tune_rank.\n", comm_rank_global() );
         auto min = tune_rank;
         auto max = tune_rank;
         comm_allreduce_min(min);

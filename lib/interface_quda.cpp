@@ -5552,6 +5552,7 @@ void performTwoLinkGaussianSmearNStep(void *h_in, QudaQuarkSmearParam *smear_par
   const double msq     = 1. / ftmp;  
   const double a       = inv_param->laplace3D * 2.0 + msq;
   const QudaParity  parity   = QUDA_INVALID_PARITY;
+  setTuneRankReset(1);
   for (int i = 0; i < smear_param->n_steps; i++) {
     if (i > 0) std::swap(in, out);
     blas::ax(ftmp, in);

@@ -129,3 +129,6 @@ void errorQuda_(const char *func, const char *file, int line, ...);
 
 #define logQuda(verbosity, ...)                                                                                        \
   if (getVerbosity() >= verbosity) { printfQuda(__VA_ARGS__); }
+
+int getTuneRankReset();
+void setTuneRankReset( int flag );

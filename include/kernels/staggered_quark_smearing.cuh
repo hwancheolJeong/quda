@@ -4,7 +4,6 @@
 #include <color_spinor_field_order.h>
 #include <gauge_field_order.h>
 #include <color_spinor.h>
-#include <dslash_helper.cuh>
 #include <index_helper.cuh>
 #include <kernels/dslash_pack.cuh> // for the packing kernel
 
@@ -43,6 +42,7 @@ namespace quda
     int threadDimMapUpper_t0[4];
     int threadDimMapLower_t0[4];
     int32_t tune_rank;
+    static int32_t tune_rank_static;
 
     StaggeredQSmearArg(ColorSpinorField &out, const ColorSpinorField &in, const GaugeField &U, int t0,
                        bool is_t0_kernel, int parity, int dir, bool dagger, const int *comm_override) :
@@ -83,15 +83,30 @@ namespace quda
       }
 
       // find the minimum rank for tuning
-      if( is_t0_kernel ) {
-        tune_rank = ( t0 < 0 ) ? comm_size() : comm_rank_global();
-        comm_allreduce_min( tune_rank );
+      if( tune_rank_static < 0 || getTuneRankReset() ) {
+        if( is_t0_kernel ) {
+          tune_rank = ( t0 < 0 ) ? comm_size() : comm_rank_global();
+          comm_allreduce_min( tune_rank );
+          printf( "[%d] comm_allreduce_min is called.\n", comm_rank_global() );
+          fflush(stdout);
+        }
+        else {
+          tune_rank = 0;
+        }
+
+        tune_rank_static = tune_rank;
+        setTuneRankReset(0);
       }
       else {
-        tune_rank = 0;
+        tune_rank = tune_rank_static;
       }
+      printf( "[%d] tune_rank = %d\n", comm_rank_global(), tune_rank );
+      
     }
   };
+
+  template <typename Float, int nSpin_, int nColor_, int nDim, QudaReconstructType reconstruct_>
+  int32_t StaggeredQSmearArg<Float, nSpin_, nColor_, nDim, reconstruct_>::tune_rank_static = -1;
 
   /**
      Applies the off-diagonal part of the covariant derivative operator

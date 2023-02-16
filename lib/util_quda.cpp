@@ -155,3 +155,14 @@ void errorQuda_(const char *func, const char *file, int line, ...)
   quda::saveTuneCache(true);
   comm_abort(1);
 }
+
+int tuneRankReset = 0;
+int getTuneRankReset()
+{
+  return tuneRankReset;
+}
+void setTuneRankReset( int flag )
+{
+  tuneRankReset = flag;
+  return ;
+}
